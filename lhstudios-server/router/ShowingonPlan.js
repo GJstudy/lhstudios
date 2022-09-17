@@ -1,0 +1,183 @@
+//定义排片计划的接口
+
+const express=require('express')
+// 通过router对象定义接口来实现业务
+const router=express.Router()
+// 引入joi模块
+const Joi=require('joi')
+const response=require('../utils/Response.js')
+
+// 引入mysql连接池
+const pool=require('../utils/db.js')
+
+/**
+ * 添加排片计划接口
+ * @param:
+ * 详见接口文档
+ * @returns：
+ * {code：200，msg：‘ok’}
+ */
+ router.post('/plan/add',(req,resp)=>{
+  let {cinema_id,cinema_room_id,movie_id,showingon_date,showingon_time,status,price}=req.body //post请求在req.body
+  // 表单验证
+  let schema=Joi.object({
+    cinema_id:Joi.number().required(),//必填
+    cinema_room_id:Joi.number().required(), //必填
+    movie_id:Joi.number().required(), //必填
+    showingon_date: Joi.string()
+      .required()
+      .pattern(new RegExp("\\d{4}-\\d{2}-\\d{2}")),
+    showingon_time:Joi.string().required().pattern(new RegExp('\\d{2}:\\d{2}')), //必填
+    status:Joi.number().required(), //必填
+    price:Joi.number().required(), //必填
+  })
+  let {error,value}=schema.validate(req.body)
+  if(error){
+    resp.send(response.error(400,error))
+    return;
+  }
+  // 表单验证通过，执行添加操作
+  let sql=`insert into showingon_plan (cinema_id,cinema_room_id,movie_id,showingon_date,showingon_time,status,price) values (?,?,?,?,?,?,?)`
+  pool.query(sql,[cinema_id,cinema_room_id,movie_id,showingon_date,showingon_time,status,price],(error,result)=>{
+    if(error){
+      resp.send(response.error(500,error))
+      throw error;
+    }
+    // 将结果封装，返回给客户端
+    resp.send(response.ok())
+  })
+});
+
+/**
+ * 根据放映厅id查询排片计划列表
+ */
+  // 通过ID查询放映厅接口
+  router.get("/plans/roomid", (req, resp) => {
+    let { room_id } = req.query;
+    // 表单验证
+    let schema = Joi.object({
+      room_id: Joi.string().required(), // 必填
+    });
+    let { error, value } = schema.validate(req.query);
+    if (error) {
+      resp.send(response.error(400, error));
+      return; // 结束
+    }
+    // 执行查询业务
+    let sql = `select 
+      sp.id plan_id,
+      sp.cinema_id cinema_id,
+      sp.cinema_room_id cinema_room_id,
+      sp.movie_id movie_id,
+      mi.title title,
+      sp.showingon_date showingon_date,
+      sp.showingon_time showingon_time,
+      sp.status status,
+      sp.price price
+    from 
+      showingon_plan sp join movie_info mi on sp.movie_id=mi.id
+    where 
+      cinema_room_id=? and showingon_date>? 
+    ORDER BY 
+      showingon_date, showingon_time`;
+  
+    let now = new Date();
+    let year = now.getFullYear();
+    let month =
+      now.getMonth() + 1 < 10 ? "0" + (now.getMonth() + 1) : now.getMonth();
+    let day = now.getDate() ? "0" + now.getDate() : now.getDate();
+    let time = `${year}-${month}-${day}`;
+    pool.query(sql, [room_id, time], (error, result) => {
+      if (error) {
+        resp.send(response.error(500, error));
+        throw error;
+      }
+      resp.send(response.ok(result));
+    });
+  });
+
+  /**
+ * 删除排片计划接口
+ * @params
+ * id  计划id
+ * @return
+ * {code：200，msg:'ok'}
+ */
+ router.post('/plan/del',(req,resp)=>{
+  let {id}=req.body
+  // 表单验证
+  let schema=Joi.object({
+    id:Joi.string().required(),//必填
+  })
+  let {error,value}=schema.validate(req.body)
+  if(error){
+    resp.send(response.error(400,error))
+    return;
+  }
+  // 执行删除业务
+  let sql='delete from showingon_plan where id=?'
+  pool.query(sql,[id],(error,result)=>{
+    if(error){
+      resp.send(response.error(500,error))
+      throw error;
+    }
+    // 将结果封装，返回给客户端
+    resp.send(response.ok())
+  })
+});
+
+/**
+ * 发布当前排片计划
+ */
+router.post('/plan/publish',(req,resp)=>{
+  let {id}=req.body
+  // 表单验证
+  let schema=Joi.object({
+    id:Joi.string().required(),//必填
+  })
+  let {error,value}=schema.validate(req.body)
+  if(error){
+    resp.send(response.error(400,error))
+    return;
+  }
+  // 执行业务
+  let sql=`update showingon_plan set status=1 where id=?`
+  pool.query(sql,[id],(error,result)=>{
+    if(error){
+      resp.send(response.error(500,error))
+      throw error;
+    }
+    // 将结果封装，返回给客户端
+    resp.send(response.ok())
+  })
+});
+
+/**
+ * 不发布当前排片计划
+ */
+ router.post('/plan/no-publish',(req,resp)=>{
+  let {id}=req.body
+  // 表单验证
+  let schema=Joi.object({
+    id:Joi.string().required(),//必填
+  })
+  let {error,value}=schema.validate(req.body)
+  if(error){
+    resp.send(response.error(400,error))
+    return;
+  }
+  // 执行业务
+  let sql=`update showingon_plan set status=0 where id=?`
+  pool.query(sql,[id],(error,result)=>{
+    if(error){
+      resp.send(response.error(500,error))
+      throw error;
+    }
+    // 将结果封装，返回给客户端
+    resp.send(response.ok())
+  })
+});
+
+
+// 将router对象导出
+module.exports=router
